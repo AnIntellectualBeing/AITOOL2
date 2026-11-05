@@ -103,11 +103,37 @@ async function settle(page: Page, maxMs: number): Promise<boolean> {
 }
 
 function locate(page: Page, s: Step): Locator | null {
-  if (s.selector) return page.locator(s.selector).first();
-  if (s.label) return page.getByLabel(s.label, { exact: false }).first();
-  if (s.text) {
-    // Prefer exact text, then any element containing the text.
-    return page.getByText(s.text, { exact: true }).or(page.getByText(s.text)).first();
+  if (s.selector) return page.locator(s.selector);
+  if (s.label) return page.getByLabel(s.label, { exact: false });
+  if (s.text) return page.getByText(s.text, { exact: true }).or(page.getByText(s.text));
+  return null;
+}
+
+/**
+ * Of all elements matching a locator, pick the first visible one that is actually
+ * on top at its centre (not covered by another screen, sheet or overlay).
+ */
+async function pickHittable(loc: Locator, timeout: number): Promise<{ x: number; y: number } | null> {
+  await loc.first().waitFor({ state: "attached", timeout }).catch(() => {});
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const all = await loc.all();
+    for (const el of all.slice(0, 20)) {
+      if (!(await el.isVisible().catch(() => false))) continue;
+      await el.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+      const bb = await el.boundingBox().catch(() => null);
+      if (!bb || bb.width < 1 || bb.height < 1) continue;
+      const cx = bb.x + bb.width / 2;
+      const cy = bb.y + bb.height / 2;
+      const onTop = await el
+        .evaluate((node, [x, y]) => {
+          const hit = document.elementFromPoint(x, y);
+          return !!hit && (node === hit || node.contains(hit) || hit.contains(node));
+        }, [cx, cy] as [number, number])
+        .catch(() => false);
+      if (onTop) return { x: cx, y: cy };
+    }
+    await new Promise((r) => setTimeout(r, 150));
   }
   return null;
 }
@@ -198,16 +224,12 @@ export async function recordBuild(opts: RecordOptions): Promise<RecordResult> {
           case "click":
           case "tap":
           case "hover": {
-            let p = point(s, vp);
-            const loc = p ? null : locate(page, s);
-            if (!p && !loc) throw new Error(`${s.action} needs selector, text, label or x/y`);
-            if (loc) {
-              await loc.waitFor({ state: "visible", timeout: stepTimeout });
-              await loc.scrollIntoViewIfNeeded({ timeout: stepTimeout }).catch(() => {});
-              const bb = await loc.boundingBox();
-              if (!bb) throw new Error("element has no size on screen");
-              p = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
-            }
+            const fallback = point(s, vp);
+            const loc = locate(page, s);
+            let p: { x: number; y: number } | null = null;
+            if (loc) p = await pickHittable(loc, fallback ? Math.min(2500, stepTimeout) : stepTimeout);
+            if (!p && fallback) p = fallback;
+            if (!p) throw new Error(loc ? `couldn't find a visible, uncovered element for ${JSON.stringify(s.text ?? s.label ?? s.selector)}` : `${s.action} needs selector, text, label or x/y`);
             if (!vp.mobile) {
               await page.mouse.move(p!.x, p!.y, { steps: 14 });
               mouse = p!;
@@ -221,11 +243,10 @@ export async function recordBuild(opts: RecordOptions): Promise<RecordResult> {
           case "type": {
             const loc = locate(page, s);
             if (loc) {
-              await loc.waitFor({ state: "visible", timeout: stepTimeout });
-              if (vp.mobile) {
-                const bb = await loc.boundingBox();
-                if (bb) await page.touchscreen.tap(bb.x + bb.width / 2, bb.y + bb.height / 2);
-              } else await loc.click();
+              const p = await pickHittable(loc, stepTimeout);
+              if (!p) throw new Error(`couldn't find the field ${JSON.stringify(s.text ?? s.label ?? s.selector)}`);
+              if (vp.mobile) await page.touchscreen.tap(p.x, p.y);
+              else await page.mouse.click(p.x, p.y);
             }
             await page.keyboard.type(s.value ?? "", { delay: 45 });
             break;
@@ -235,7 +256,7 @@ export async function recordBuild(opts: RecordOptions): Promise<RecordResult> {
             break;
           case "scroll": {
             const loc = locate(page, s);
-            if (loc) await loc.hover({ timeout: stepTimeout }).catch(() => {});
+            if (loc) await loc.first().hover({ timeout: stepTimeout }).catch(() => {});
             else await page.mouse.move(mouse.x, mouse.y);
             const total = s.dy ?? 400;
             const totalX = s.dx ?? 0;

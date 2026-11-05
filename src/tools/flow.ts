@@ -256,8 +256,9 @@ export async function inferFlow(pathOrUrl: string, opts: { budget?: Budget; outD
     const action: Step["action"] = trigger.type === "scroll" ? "scroll" : watch.platform === "desktop" ? "click" : "tap";
     const step: Step = { action, capture, pause: holdMs(B) };
     if (action === "scroll") step.dy = trigger.scrollPx ?? 400;
-    else if (trigger.targetText && !/^\W*$/.test(trigger.targetText)) step.text = trigger.targetText;
     else if (trigger.x !== undefined && trigger.y !== undefined) {
+      // Text is the robust target; the point is a fallback if the text isn't found.
+      if (trigger.targetText && !/^\W*$/.test(trigger.targetText)) step.text = trigger.targetText;
       step.x = trigger.x;
       step.y = trigger.y;
     } else notes.push(`Couldn't see what triggered ${A.state} → ${B.state} at ${A.end.toFixed(2)}s; check that moment with get_frames.`);

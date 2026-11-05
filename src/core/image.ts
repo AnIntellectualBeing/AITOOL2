@@ -244,13 +244,23 @@ export function dilate(mask: Uint8Array, w: number, h: number, r: number): Uint8
 // ---------------------------------------------------------------- SSIM
 
 /** Mean structural similarity of two equally sized grayscale buffers (8x8 windows, stride 4). */
-export function ssim(a: Uint8Array, b: Uint8Array, w: number, h: number, win = 8, stride = 4): { mean: number; map: Float32Array; mapW: number; mapH: number } {
+export function ssim(
+  a: Uint8Array,
+  b: Uint8Array,
+  w: number,
+  h: number,
+  win = 8,
+  stride = 4,
+  minVar = 25,
+): { mean: number; structured: number; map: Float32Array; mapW: number; mapH: number } {
   const C1 = (0.01 * 255) ** 2;
   const C2 = (0.03 * 255) ** 2;
   const mapW = Math.max(1, Math.floor((w - win) / stride) + 1);
   const mapH = Math.max(1, Math.floor((h - win) / stride) + 1);
   const map = new Float32Array(mapW * mapH);
   let total = 0;
+  let sTotal = 0;
+  let sCount = 0;
   const n = win * win;
   for (let my = 0; my < mapH; my++) {
     for (let mx = 0; mx < mapW; mx++) {
@@ -280,9 +290,15 @@ export function ssim(a: Uint8Array, b: Uint8Array, w: number, h: number, win = 8
       const s = ((2 * ma * mb + C1) * (2 * cov + C2)) / ((ma * ma + mb * mb + C1) * (va + vb + C2));
       map[my * mapW + mx] = s;
       total += s;
+      // Windows with texture in either image (text, edges, icons) — flat areas say little.
+      if (Math.max(va, vb) > minVar) {
+        sTotal += s;
+        sCount++;
+      }
     }
   }
-  return { mean: total / map.length, map, mapW, mapH };
+  const mean = total / map.length;
+  return { mean, structured: sCount ? sTotal / sCount : mean, map, mapW, mapH };
 }
 
 // ---------------------------------------------------------------- colour
