@@ -1,0 +1,89 @@
+{
+  "name": "phone-app",
+  "viewport": {
+    "width": 780,
+    "height": 1688,
+    "deviceScaleFactor": 1,
+    "mobile": true
+  },
+  "duration": 9.8,
+  "actions": [
+    {
+      "action": "goto",
+      "capture": "today",
+      "pause": 1500,
+      "time": 0
+    },
+    {
+      "action": "tap",
+      "text": "Read 20 pages",
+      "capture": "detail",
+      "pause": 1500,
+      "time": 1.779,
+      "point": {
+        "x": 0.515,
+        "y": 0.345
+      }
+    },
+    {
+      "action": "tap",
+      "text": "‹ Today",
+      "capture": "today-again",
+      "pause": 1000,
+      "time": 4.091,
+      "point": {
+        "x": 0.132,
+        "y": 0.09
+      }
+    },
+    {
+      "action": "tap",
+      "label": "New habit",
+      "capture": "sheet",
+      "pause": 1500,
+      "time": 5.814,
+      "point": {
+        "x": 0.867,
+        "y": 0.841
+      }
+    },
+    {
+      "action": "tap",
+      "text": "Create habit",
+      "capture": "today-final",
+      "pause": 1000,
+      "time": 8.046,
+      "point": {
+        "x": 0.5,
+        "y": 0.921
+      }
+    }
+  ],
+  "captures": [
+    {
+      "name": "today",
+      "time": 0.276
+    },
+    {
+      "name": "detail",
+      "time": 2.588
+    },
+    {
+      "name": "today-again",
+      "time": 4.812
+    },
+    {
+      "name": "sheet",
+      "time": 6.544
+    },
+    {
+      "name": "today-final",
+      "time": 8.757
+    }
+  ],
+  "screens": [
+    "today",
+    "detail",
+    "sheet"
+  ]
+}

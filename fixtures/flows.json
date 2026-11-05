@@ -1,0 +1,89 @@
+{
+  "web-app": {
+    "app": "fixtures/apps/web-app",
+    "viewport": "desktop",
+    "url": "/",
+    "steps": [
+      {
+        "action": "goto",
+        "capture": "projects",
+        "pause": 1500
+      },
+      {
+        "action": "click",
+        "text": "Atlas redesign",
+        "capture": "project",
+        "pause": 1500
+      },
+      {
+        "action": "click",
+        "text": "Settings",
+        "capture": "settings",
+        "pause": 1200
+      },
+      {
+        "action": "click",
+        "selector": "#mentions",
+        "capture": "settings-mentions-on",
+        "pause": 1000
+      },
+      {
+        "action": "click",
+        "text": "Projects",
+        "capture": "projects-again",
+        "pause": 1200
+      }
+    ],
+    "screens": [
+      "projects",
+      "project",
+      "settings"
+    ]
+  },
+  "phone-app": {
+    "app": "fixtures/apps/phone-app",
+    "viewport": {
+      "width": 780,
+      "height": 1688,
+      "deviceScaleFactor": 1,
+      "mobile": true
+    },
+    "url": "/?statusbar=1&zoom=2",
+    "steps": [
+      {
+        "action": "goto",
+        "capture": "today",
+        "pause": 1500
+      },
+      {
+        "action": "tap",
+        "text": "Read 20 pages",
+        "capture": "detail",
+        "pause": 1500
+      },
+      {
+        "action": "tap",
+        "text": "‹ Today",
+        "capture": "today-again",
+        "pause": 1000
+      },
+      {
+        "action": "tap",
+        "label": "New habit",
+        "capture": "sheet",
+        "pause": 1500
+      },
+      {
+        "action": "tap",
+        "text": "Create habit",
+        "capture": "today-final",
+        "pause": 1000
+      }
+    ],
+    "screens": [
+      "today",
+      "detail",
+      "sheet"
+    ]
+  }
+}

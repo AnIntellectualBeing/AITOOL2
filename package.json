@@ -1,0 +1,64 @@
+{
+  "name": "remake-agents",
+  "version": "0.1.0",
+  "description": "Show it a video of any app. Get a working copy. An MCP server + agent skill that lets your coding agent watch a screen recording, rebuild the app, and check its own work.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "remake-agents": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "skill",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/postbuild.mjs",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/unit",
+    "test:e2e": "vitest run test/e2e",
+    "fixtures": "node scripts/make-fixtures.mjs",
+    "eval": "node scripts/eval.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "cursor",
+    "gemini-cli",
+    "opencode",
+    "agent-skill",
+    "screen-recording",
+    "video-to-code",
+    "ui-clone",
+    "prototyping"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnIntellectualBeing/AITOOL2.git"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "jsonc-parser": "^3.3.1",
+    "playwright-core": "^1.55.0",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

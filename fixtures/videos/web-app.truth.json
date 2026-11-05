@@ -1,0 +1,89 @@
+{
+  "name": "web-app",
+  "viewport": {
+    "width": 1280,
+    "height": 800,
+    "deviceScaleFactor": 1,
+    "mobile": false
+  },
+  "duration": 10.367,
+  "actions": [
+    {
+      "action": "goto",
+      "capture": "projects",
+      "pause": 1500,
+      "time": 0
+    },
+    {
+      "action": "click",
+      "text": "Atlas redesign",
+      "capture": "project",
+      "pause": 1500,
+      "time": 1.753,
+      "point": {
+        "x": 0.171,
+        "y": 0.29
+      }
+    },
+    {
+      "action": "click",
+      "text": "Settings",
+      "capture": "settings",
+      "pause": 1200,
+      "time": 4.216,
+      "point": {
+        "x": 0.332,
+        "y": 0.039
+      }
+    },
+    {
+      "action": "click",
+      "selector": "#mentions",
+      "capture": "settings-mentions-on",
+      "pause": 1000,
+      "time": 6.332,
+      "point": {
+        "x": 0.495,
+        "y": 0.407
+      }
+    },
+    {
+      "action": "click",
+      "text": "Projects",
+      "capture": "projects-again",
+      "pause": 1200,
+      "time": 8.253,
+      "point": {
+        "x": 0.191,
+        "y": 0.039
+      }
+    }
+  ],
+  "captures": [
+    {
+      "name": "projects",
+      "time": 0.25
+    },
+    {
+      "name": "project",
+      "time": 2.714
+    },
+    {
+      "name": "settings",
+      "time": 5.131
+    },
+    {
+      "name": "settings-mentions-on",
+      "time": 7.252
+    },
+    {
+      "name": "projects-again",
+      "time": 9.115
+    }
+  ],
+  "screens": [
+    "projects",
+    "project",
+    "settings"
+  ]
+}

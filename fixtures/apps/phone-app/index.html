@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Sprout habits</title>
+<style>
+  :root { --bg: #fbf8f3; --surface: #ffffff; --text: #1f2a24; --muted: #75807a; --accent: #2f8f5b; --accent-soft: #e2f2e8; --line: #ece7de; --radius: 18px; }
+  body.broken { --bg: #eef2ff; --accent: #e11d48; --accent-soft: #ffe4e6; --radius: 4px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--text); font: 16px/1.4 -apple-system, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .statusbar { position: fixed; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; font-weight: 600; font-size: 15px; z-index: 50; pointer-events: none; }
+  .statusbar .icons { display: flex; gap: 6px; align-items: center; }
+  .statusbar .icons i { display: inline-block; background: var(--text); border-radius: 2px; }
+  .screen { position: absolute; inset: 0; padding: 60px 22px 100px; background: var(--bg); }
+  body.no-status .screen { padding-top: 24px; }
+  h1 { font-size: 30px; margin: 4px 0 2px; letter-spacing: -0.02em; }
+  .date { color: var(--muted); font-size: 15px; margin: 0; }
+  .summary { margin: 20px 0 18px; background: var(--accent); color: white; border-radius: var(--radius); padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .summary b { font-size: 28px; display: block; }
+  .ring { width: 54px; height: 54px; border-radius: 50%; border: 6px solid rgba(255,255,255,.35); border-top-color: #fff; border-right-color: #fff; }
+  .list { display: flex; flex-direction: column; gap: 12px; }
+  .habit { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); }
+  .dot { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: white; }
+  .habit .t { flex: 1; }
+  .habit b { display: block; font-size: 17px; }
+  .habit small { color: var(--muted); font-size: 14px; }
+  .tick { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); }
+  .tick.on { background: var(--accent); border-color: var(--accent); }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: space-around; padding-top: 12px; font-size: 12px; color: var(--muted); }
+  .tabbar div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tabbar i { width: 24px; height: 24px; border-radius: 7px; background: var(--line); }
+  .tabbar .active { color: var(--accent); }
+  .tabbar .active i { background: var(--accent); }
+  .fab { position: absolute; right: 22px; bottom: 104px; width: 60px; height: 60px; border-radius: 50%; background: var(--text); color: white; font-size: 32px; display: grid; place-items: center; border: 0; box-shadow: 0 8px 20px rgba(0,0,0,.18); }
+  /* push transition */
+  #detail { transform: translateX(100%); transition: transform 320ms cubic-bezier(.42,0,.58,1); z-index: 10; }
+  #detail.open { transform: none; }
+  .back { font-size: 17px; color: var(--accent); font-weight: 600; background: none; border: 0; padding: 6px 0; }
+  .big { font-size: 76px; font-weight: 800; letter-spacing: -0.04em; margin: 22px 0 0; line-height: 1; }
+  .week { display: flex; gap: 8px; margin: 26px 0; }
+  .week div { flex: 1; text-align: center; font-size: 13px; color: var(--muted); }
+  .week span { display: block; height: 38px; border-radius: 12px; background: var(--line); margin-bottom: 6px; }
+  .week span.on { background: var(--accent); }
+  .primary { width: 100%; padding: 17px; border-radius: 16px; border: 0; background: var(--accent); color: white; font-size: 17px; font-weight: 700; }
+  .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); padding: 16px 18px; margin-bottom: 18px; }
+  /* bottom sheet */
+  #scrim { position: absolute; inset: 0; background: rgba(15,20,18,.4); opacity: 0; pointer-events: none; transition: opacity 360ms ease-out; z-index: 20; }
+  #scrim.open { opacity: 1; pointer-events: auto; }
+  #sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-radius: 26px 26px 0 0; padding: 14px 22px 40px; transform: translateY(100%); transition: transform 360ms cubic-bezier(0,0,.58,1); z-index: 30; }
+  #sheet.open { transform: none; }
+  .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 18px; }
+  #sheet h2 { margin: 0 0 16px; font-size: 22px; }
+  .field { border: 1.5px solid var(--line); border-radius: 14px; padding: 15px 16px; font-size: 17px; color: var(--muted); margin-bottom: 18px; }
+  .chips { display: flex; gap: 10px; margin-bottom: 24px; }
+  .chips span { width: 38px; height: 38px; border-radius: 50%; }
+  .label { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="statusbar" id="statusbar" hidden><span>9:41</span><span class="icons"><i style="width:17px;height:11px"></i><i style="width:15px;height:11px"></i><i style="width:25px;height:12px;border-radius:4px"></i></span></div>
+
+<section class="screen" id="today">
+  <p class="date">Thursday, June 12</p>
+  <h1 id="greeting">Good morning</h1>
+  <div class="summary"><div><b>2 of 4</b><span>habits done today</span></div><div class="ring"></div></div>
+  <div class="list" id="list"></div>
+  <button class="fab" id="add" aria-label="New habit">+</button>
+  <nav class="tabbar"><div class="active"><i></i>Today</div><div><i></i>Stats</div><div><i></i>Profile</div></nav>
+</section>
+
+<section class="screen" id="detail">
+  <button class="back" id="back">‹ Today</button>
+  <p class="label" style="margin-top:18px">Current streak</p>
+  <div class="big" id="streak">12 days</div>
+  <div class="week" id="week"></div>
+  <div class="card"><b>Read 20 pages</b><br><small style="color:var(--muted)">Every day · 8:00 PM reminder</small></div>
+  <button class="primary" id="done">Mark as done</button>
+</section>
+
+<div id="scrim"></div>
+<div id="sheet">
+  <div class="grab"></div>
+  <h2>New habit</h2>
+  <div class="field">e.g. Drink water</div>
+  <p class="label">Colour</p>
+  <div class="chips"><span style="background:#2f8f5b"></span><span style="background:#e0a526"></span><span style="background:#3b82f6"></span><span style="background:#e2557a"></span></div>
+  <button class="primary" id="create">Create habit</button>
+</div>
+
+<script>
+  const q = new URLSearchParams(location.search);
+  const broken = q.has("broken");
+  if (broken) document.body.classList.add("broken");
+  // Fixture recordings use ?zoom=2 on a 780px-wide viewport to get device-resolution video.
+  if (q.get("zoom")) document.documentElement.style.zoom = q.get("zoom");
+  if (q.has("statusbar")) document.getElementById("statusbar").hidden = false; else document.body.classList.add("no-status");
+  const habits = [
+    { name: "Read 20 pages", sub: "12 day streak", color: "#2f8f5b", on: true, letter: "R" },
+    { name: "Morning run", sub: "3 day streak", color: "#e0a526", on: true, letter: "M" },
+    { name: "Meditate", sub: "Not yet today", color: "#3b82f6", on: false, letter: "Z" },
+    { name: "No phone after 10", sub: "Not yet today", color: "#e2557a", on: false, letter: "N" },
+  ];
+  if (broken) { habits.pop(); document.getElementById("greeting").textContent = "Hello there"; document.getElementById("done").textContent = "Complete"; }
+  document.getElementById("list").innerHTML = habits.map((h, i) => `
+    <div class="habit" data-i="${i}"><div class="dot" style="background:${h.color}">${h.letter}</div>
+    <div class="t"><b>${h.name}</b><small>${h.sub}</small></div><div class="tick ${h.on ? "on" : ""}"></div></div>`).join("");
+  document.getElementById("week").innerHTML = ["M","T","W","T","F","S","S"].map((d, i) => `<div><span class="${i < 4 ? "on" : ""}"></span>${d}</div>`).join("");
+  const $ = (id) => document.getElementById(id);
+  document.querySelectorAll(".habit").forEach(el => el.addEventListener("click", () => $("detail").classList.add("open")));
+  $("back").addEventListener("click", () => $("detail").classList.remove("open"));
+  $("add").addEventListener("click", () => { $("sheet").classList.add("open"); $("scrim").classList.add("open"); });
+  const close = () => { $("sheet").classList.remove("open"); $("scrim").classList.remove("open"); };
+  $("scrim").addEventListener("click", close);
+  $("create").addEventListener("click", close);
+</script>
+</body>
+</html>
