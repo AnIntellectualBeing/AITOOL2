@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Tokens measured by Remake (watch_video palette / typeScale / spacing) */
+@theme {
+  --color-bg: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-ink: #161822;
+  --color-muted: #5f6577;
+  --color-accent: #4b40e4;
+  --color-accent-soft: #e8e7fc;
+  --color-line: #e3e6ef;
+  --color-done: #16a34a;
+  --font-sans: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); font-size: 15px; line-height: 1.45; }
+
+/* Route change: fade-up, ~267 ms ease-out (measured) */
+@keyframes enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.page-enter { animation: enter 267ms ease-out both; }

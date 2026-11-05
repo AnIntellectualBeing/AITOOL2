@@ -287,7 +287,9 @@ export async function watchVideo(pathOrUrl: string, opts: WatchOptions = {}): Pr
   );
   const allLines = [...ocrByState.values()].flat().filter((l) => l.box.y / info.height > suggestedCrop.top);
   const seen = new Set<string>();
-  const uniqueLines = allLines.filter((l) => (seen.has(l.text) ? false : (seen.add(l.text), true)));
+  // Same words at a different size (nav "Projects" vs heading "Projects") are different type levels.
+  const key = (l: OcrLine) => `${l.text}|${Math.round(l.box.h / 6)}`;
+  const uniqueLines = allLines.filter((l) => (seen.has(key(l)) ? false : (seen.add(key(l)), true)));
   const types = typeScale(uniqueLines, cssScale);
   const layouts = await Promise.all(states.slice(0, 12).map((s) => layoutBoxes(s.keyframe)));
   const spacing = spacingFrom(layouts, cssViewport.width);

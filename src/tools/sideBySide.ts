@@ -3,7 +3,8 @@ import path from "node:path";
 import sharp from "sharp";
 import { RemakeError } from "../core/errors.js";
 import { run } from "../core/exec.js";
-import { findTools, h264Args, probe, type VideoInfo } from "../core/ffmpeg.js";
+import { findTools, h264Args, probe, sampleGray, type VideoInfo } from "../core/ffmpeg.js";
+import { segmentTimeline } from "../core/motion.js";
 import { escapeXml } from "../core/image.js";
 import { ensureDir, workRoot } from "../core/paths.js";
 
@@ -21,8 +22,9 @@ export interface SideBySideOptions {
    * - "segments": stretch each build segment so marked moments line up (needs marks)
    * - "stretch": stretch the whole build to the original's length
    * - "pad": play both at natural speed; the shorter one holds its last frame
+   * - "auto" (default without marks): detect the screen transitions in both videos and line them up
    */
-  sync?: "segments" | "stretch" | "pad";
+  sync?: "auto" | "segments" | "stretch" | "pad";
   /** Matching moments (seconds), e.g. when each screen appears, in the original and the build. */
   originalMarks?: number[];
   buildMarks?: number[];
@@ -129,6 +131,14 @@ export function segmentFilter(input: string, out: string, o: number[], b: number
   return { filter, duration };
 }
 
+/** Start times of the big screen changes in a video (small blips like cursors are ignored). */
+export async function transitionStarts(info: VideoInfo): Promise<number[]> {
+  const width = Math.round(Math.sqrt((20_000 * info.width) / info.height));
+  const s = await sampleGray(info, { fps: 15, width });
+  const tl = segmentTimeline(s);
+  return tl.motions.filter((m) => m.peak > 0.04 && m.bbox && m.bbox.w * m.bbox.h > s.width * s.height * 0.15).map((m) => Math.round(m.start * 1000) / 1000);
+}
+
 /** Original vs remake comparison videos (16:9 and 9:16) with a small "Made with Remake" label. */
 export async function makeSideBySide(opts: SideBySideOptions): Promise<SideBySideResult> {
   const { ffmpeg } = findTools();
@@ -137,7 +147,18 @@ export async function makeSideBySide(opts: SideBySideOptions): Promise<SideBySid
   const watermark = opts.watermark !== false;
   const labels = { original: opts.labels?.original ?? "Original", build: opts.labels?.build ?? "Remake" };
   const notes: string[] = [];
-  let sync = opts.sync ?? (opts.originalMarks?.length && opts.buildMarks?.length ? "segments" : "pad");
+  let sync = opts.sync ?? (opts.originalMarks?.length && opts.buildMarks?.length ? "segments" : "auto");
+  if (sync === "auto") {
+    const [mo, mb] = await Promise.all([transitionStarts(oi), transitionStarts(bi)]);
+    if (mo.length && mo.length === mb.length) {
+      opts = { ...opts, originalMarks: mo, buildMarks: mb };
+      sync = "segments";
+      notes.push(`auto sync: lined up ${mo.length} screen changes found in both videos.`);
+    } else {
+      notes.push(`auto sync: found ${mo.length} screen changes in the original and ${mb.length} in the build, so played both at natural speed. Pass original_marks/build_marks to line them up.`);
+      sync = "pad";
+    }
+  }
   if (sync === "segments" && (!opts.originalMarks?.length || opts.originalMarks.length !== opts.buildMarks?.length)) {
     notes.push("segments sync needs originalMarks and buildMarks of the same length; fell back to pad.");
     sync = "pad";

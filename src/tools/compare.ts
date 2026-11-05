@@ -20,7 +20,7 @@ export interface CompareOptions {
   build: FrameRef[];
   /** Crop applied to the original frames (e.g. watch_video's suggestedCrop). */
   crop?: Crop;
-  /** Crop applied to build screenshots. */
+  /** Crop applied to build screenshots (default: same as `crop`; pass {} for none). */
   buildCrop?: Crop;
   threshold?: number;
   /** Every individual metric must reach this for a screen to pass (default 0.6). */
@@ -189,7 +189,9 @@ async function comparePair(
 ): Promise<PairResult> {
   const notes: string[] = [];
   const po = await prepare(o.path, opts.crop);
-  const pb = await prepare(b.path, opts.buildCrop, po.rgb.height);
+  // By default the build is cropped like the original: builds keep the safe-area padding, so the
+  // same fraction lines the content up.
+  const pb = await prepare(b.path, opts.buildCrop ?? opts.crop, po.rgb.height);
   const aspectO = po.crop.height / po.crop.width;
   const aspectB = pb.crop.height / pb.crop.width;
   if (Math.abs(aspectO - aspectB) / aspectO > 0.08) {
@@ -199,7 +201,10 @@ async function comparePair(
   const go = await grayBlurHalf(po.rgb);
   const gb = await grayBlurHalf(pb.rgb);
   const ss = ssim(go.data, gb.data, go.w, go.h);
-  const visual = clamp01((ss.structured - 0.25) / 0.65);
+  // Structural similarity on textured windows: ~0.99 for the same app (video compression only),
+  // ~0.9 for a close remake, lower for missing/moved elements.
+  const visual = clamp01((ss.structured - 0.6) / 0.38);
+  if (process.env.REMAKE_DEBUG_COMPARE) console.error("[ssim]", o.name, ss.structured.toFixed(4), ss.mean.toFixed(4));
   // Layout
   const lo = await layoutBoxes(po.rgb);
   const lb = await layoutBoxes(pb.rgb);
@@ -275,29 +280,46 @@ async function comparePair(
     return { box: [r3(r.box.x), r3(r.box.y), r3(r.box.w), r3(r.box.h)], severity: r3(r.mass / totalMass), hint: hints.join("; ") };
   });
 
-  // Diff image: original | build | build with mismatch boxes
+  // Diff image: original | build | build with mismatch boxes (wider panels for landscape recordings).
   const diffImage = path.join(outDir, `${String(index + 1).padStart(2, "0")}-${o.name.replace(/[^a-z0-9_-]+/gi, "-")}-diff.jpg`);
-  const panel = (img: RawImage) => sharp(Buffer.from(img.data), { raw: { width: img.width, height: img.height, channels: 3 } }).png().toBuffer();
+  const PW = aspectO < 1 ? 720 : WORK_W;
+  const PH = Math.round((PW * H) / W);
+  const panelFrom = (file: string, c: Prepared["crop"]) =>
+    sharp(file).removeAlpha().extract(c).resize({ width: PW, height: PH, fit: "cover", position: "top" }).png().toBuffer();
   const gap = 10;
   const labelH = 26;
+  const sx = PW / W;
   const boxesSvg = mismatches
     .map((m, k) => {
       const [x, y, w, h] = m.box;
-      return `<rect x="${x * W}" y="${y * H}" width="${w * W}" height="${h * H}" fill="rgba(255,0,60,0.12)" stroke="#ff1744" stroke-width="2.5"/><circle cx="${x * W + 9}" cy="${y * H + 9}" r="9" fill="#ff1744"/><text x="${x * W + 9}" y="${y * H + 13}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="#fff" text-anchor="middle">${k + 1}</text>`;
+      return `<rect x="${x * PW}" y="${y * PH}" width="${w * PW}" height="${h * PH}" fill="rgba(255,0,60,0.12)" stroke="#ff1744" stroke-width="${2.5 * Math.max(1, sx * 0.7)}"/><circle cx="${x * PW + 9}" cy="${y * PH + 9}" r="9" fill="#ff1744"/><text x="${x * PW + 9}" y="${y * PH + 13}" font-size="12" font-family="Helvetica, Arial, sans-serif" fill="#fff" text-anchor="middle">${k + 1}</text>`;
     })
     .join("");
-  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${boxesSvg}</svg>`);
-  const marked = await sharp(await panel(pb.rgb)).composite([{ input: overlay }]).png().toBuffer();
-  const label = (t: string) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${labelH}"><text x="4" y="18" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="#eee">${escapeXml(t)}</text></svg>`);
-  await sharp({ create: { width: W * 3 + gap * 4, height: H + labelH + gap, channels: 3, background: "#111114" } })
-    .composite([
-      { input: label(`Original · ${o.name}`), left: gap, top: 2 },
-      { input: label(`Build · ${b.name}`), left: W + gap * 2, top: 2 },
-      { input: label(`Score ${Math.round(score * 100)} · biggest differences`), left: W * 2 + gap * 3, top: 2 },
-      { input: await panel(po.rgb), left: gap, top: labelH },
-      { input: await panel(pb.rgb), left: W + gap * 2, top: labelH },
-      { input: marked, left: W * 2 + gap * 3, top: labelH },
-    ])
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}">${boxesSvg}</svg>`);
+  const panelO = await panelFrom(o.path, po.crop);
+  const panelB = await panelFrom(b.path, pb.crop);
+  const marked = await sharp(panelB).composite([{ input: overlay }]).png().toBuffer();
+  const label = (t: string) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${labelH}"><text x="4" y="18" font-size="15" font-family="Helvetica, Arial, sans-serif" fill="#eee">${escapeXml(t)}</text></svg>`);
+  const columns = aspectO < 1 ? 1 : 3;
+  const tiles = [
+    { label: `Original · ${o.name}`, img: panelO },
+    { label: `Build · ${b.name}`, img: panelB },
+    { label: `Score ${Math.round(score * 100)} · biggest differences`, img: marked },
+  ];
+  const rows = Math.ceil(tiles.length / columns);
+  await sharp({ create: { width: PW * columns + gap * (columns + 1), height: rows * (PH + labelH + gap), channels: 3, background: "#111114" } })
+    .composite(
+      tiles.flatMap((t, k) => {
+        const col = k % columns;
+        const row = Math.floor(k / columns);
+        const left = gap + col * (PW + gap);
+        const top = row * (PH + labelH + gap);
+        return [
+          { input: label(t.label), left, top: top + 2 },
+          { input: t.img, left, top: top + labelH },
+        ];
+      }),
+    )
     .jpeg({ quality: 80 })
     .toFile(diffImage);
 

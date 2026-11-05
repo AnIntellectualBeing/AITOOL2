@@ -14,6 +14,8 @@ import {
   detectAgent,
   installMcp,
   installSkill,
+  pinStableCopy,
+  runningFromNpxCache,
   serverCommand,
   tilde,
   uninstallMcp,
@@ -81,7 +83,12 @@ export async function runSetup(opts: SetupOptions = {}): Promise<{ changes: Chan
     log(`Supported: ${AGENT_IDS.join(", ")}`);
     return { changes: [], configured: [] };
   }
-  const cmd = serverCommand({ npx: opts.npx });
+  let cliPath: string | undefined;
+  if (!opts.npx && runningFromNpxCache() && !opts.dryRun) {
+    cliPath = pinStableCopy();
+    log(`Installed a stable copy for your agents: ${tilde(path.dirname(path.dirname(cliPath)))}`);
+  }
+  const cmd = serverCommand({ npx: opts.npx, cliPath });
   log(`\nMCP server command: ${[cmd.command, ...cmd.args].join(" ")}\n`);
   const changes: Change[] = [];
   const claudeSkill = selected.some((d) => d.id === "claude") && opts.skill !== false;
@@ -177,7 +184,7 @@ export async function runUninstall(opts: { dryRun?: boolean; home?: string; log?
     if (opts.purge && existsSync(remakeHome())) {
       rmSync(remakeHome(), { recursive: true, force: true });
       log(`  ✔ deleted ${tilde(remakeHome())} (downloaded tools, caches, backups)`);
-    } else if (existsSync(remakeHome())) log(`\n${tilde(remakeHome())} (downloaded tools, caches, backups) was kept. Delete it with --purge.`);
+    } else if (existsSync(remakeHome())) log(`\n${tilde(remakeHome())} (Remake's app copy, downloaded tools, caches, backups) was kept. Delete it with --purge.`);
     log("Project folders may still contain a .remake/ directory with analysis output; it's safe to delete.");
   }
   return changes;

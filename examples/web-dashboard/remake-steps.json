@@ -1,0 +1,36 @@
+[
+ {
+  "action": "goto",
+  "capture": "s1",
+  "pause": 2083
+ },
+ {
+  "action": "click",
+  "capture": "s2",
+  "pause": 2167,
+  "text": "Atlas redesign",
+  "x": 0.162,
+  "y": 0.275
+ },
+ {
+  "action": "click",
+  "capture": "s3",
+  "pause": 3750,
+  "text": "Settings",
+  "x": 0.333,
+  "y": 0.042
+ },
+ {
+  "action": "click",
+  "selector": "#mentions",
+  "pause": 1500
+ },
+ {
+  "action": "click",
+  "capture": "s1-visit2",
+  "pause": 1583,
+  "text": "Projects",
+  "x": 0.181,
+  "y": 0.023
+ }
+]

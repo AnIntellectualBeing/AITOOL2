@@ -254,13 +254,13 @@ export function createServer(): McpServer {
     {
       title: "Make a side-by-side video",
       description:
-        "Make original-vs-remake comparison videos in 9:16 and 16:9 (and optionally a GIF), with a small \"Made with Remake\" label (on by default; set watermark=false to remove). sync=segments with matching marks lines up each screen change.",
+        "Make original-vs-remake comparison videos in 9:16 and 16:9 (and optionally a GIF), with a small \"Made with Remake\" label (on by default; set watermark=false to remove). By default the screen changes in both videos are detected and lined up; or pass matching original_marks/build_marks.",
       inputSchema: {
         original: z.string(),
         build: z.string(),
         layouts: z.array(z.enum(["16:9", "9:16"])).optional(),
         watermark: z.boolean().default(true),
-        sync: z.enum(["segments", "stretch", "pad"]).optional(),
+        sync: z.enum(["auto", "segments", "stretch", "pad"]).optional().describe("auto (default): line up the screen changes found in both videos"),
         original_marks: z.array(z.number()).optional().describe("Seconds in the original where each transition starts"),
         build_marks: z.array(z.number()).optional().describe("Matching seconds in the build video (record_build step times)"),
         labels: z.object({ original: z.string().optional(), build: z.string().optional() }).optional(),

@@ -65,7 +65,7 @@ Wait for the user's go-ahead, or for a different stack, before building. If the 
 3. Call `compare` with:
    - `original_frames`: the `keyframe` paths from `watch_video`, as `{path, name: "s1"}` objects.
    - `build_frames`: the screenshot paths from `record_build`, as `{path, name}` objects (names come from `capture`).
-   - `crop`: `watch_video.suggestedCrop` (it strips the recorded status bar).
+   - `crop`: `watch_video.suggestedCrop` (it strips the recorded status bar; the build is cropped the same way, which lines up because your build keeps the safe-area padding).
 4. Read the result: worst screens come first, each with `metrics`, `weakest`, `mismatches` (numbered boxes plus hints such as "missing text", "colour #a vs #b", "element missing in build") and a diff image (original | build | marked differences).
 5. **Fix the worst mismatches first**: the biggest-severity regions on the lowest-scoring screens. Re-run `record_build` + `compare`.
 6. Stop when **every screen passes** (score ≥ 0.85 and no metric < 0.6 by default) **or after 5 rounds**. Don't loop on noise: if a screen's score improves by less than 0.01 over two rounds, move on and report it.
@@ -75,10 +75,9 @@ What the metrics mean: `visual` is structural similarity, `layout` is block posi
 ## 5. Side-by-side + summary
 
 1. Run `record_build` once more with `video: true` (the default), pacing steps with `pause` close to the original hold times. The `replaySteps` from `infer_flow` already carry them.
-2. Call `make_side_by_side(original, build_video, original_marks, build_marks)`:
-   - `original_marks`: the start time of each transition in the original (from `infer_flow` edges' `occurrences[].time`, in path order).
-   - `build_marks`: the matching `record_build` `steps[].time` (the times of the actions that trigger each transition).
-   - This gives 9:16 and 16:9 MP4s with a small "Made with Remake" label. It's on by default; pass `watermark: false` if the user asks to remove it. Add `gif: true` for a README-friendly GIF.
+2. Call `make_side_by_side(original, build_video)`:
+   - By default it finds the screen changes in both videos and lines them up (`sync: "auto"`). If the counts don't match, it says so in `notes`. Then pass `original_marks` (transition start times from `infer_flow` edges' `occurrences[].time`) and `build_marks` (the matching `record_build` `steps[].time`).
+   - It makes 9:16 and 16:9 MP4s with a small "Made with Remake" label. The label is on by default; pass `watermark: false` if the user asks to remove it. Add `gif: true` for a README-friendly GIF.
 3. Give the user a short, honest summary:
    - how to run the app,
    - a per-screen score table (final round) and how many rounds it took,

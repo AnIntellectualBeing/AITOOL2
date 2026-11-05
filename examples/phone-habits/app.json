@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "habits-remake",
+    "slug": "habits-remake",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {}
+  }
+}

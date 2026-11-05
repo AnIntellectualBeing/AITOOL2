@@ -1,0 +1,7 @@
+[
+ {"action":"goto","capture":"s1","pause":1917},
+ {"action":"tap","selector":"[data-testid=habit-R]","capture":"s2","pause":1834},
+ {"action":"tap","selector":"[data-testid=back]","capture":"s1-visit2","pause":1250},
+ {"action":"tap","selector":"[data-testid=fab]","capture":"s3","pause":1917},
+ {"action":"tap","selector":"[data-testid=create]","capture":"s1-visit3","pause":1416}
+]

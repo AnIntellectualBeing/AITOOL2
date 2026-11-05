@@ -106,16 +106,37 @@ export function detectAgent(a: AgentDef): { found: boolean; why: string } {
   return { found: false, why: "not installed" };
 }
 
+/** Is this copy running from npx's temporary cache (e.g. `npx remake-agents setup`)? */
+export function runningFromNpxCache(): boolean {
+  return /[\\/]_npx[\\/]/.test(PACKAGE_ROOT);
+}
+
+/**
+ * Copy the running package (and its installed dependencies) out of the npx cache into
+ * ~/.remake/app/<version>, so agents start a stable local copy: no network on start-up,
+ * and npm cache cleaning can't break it. Returns the CLI path inside the copy.
+ */
+export function pinStableCopy(): string {
+  // PACKAGE_ROOT = …/_npx/<hash>/node_modules/remake-agents → copy …/_npx/<hash>
+  const nm = path.dirname(PACKAGE_ROOT);
+  const treeRoot = path.basename(nm) === "node_modules" ? path.dirname(nm) : PACKAGE_ROOT;
+  const dest = path.join(remakeHome(), "app", VERSION);
+  const cli = path.join(dest, path.relative(treeRoot, PACKAGE_ROOT), "dist", "cli.js");
+  if (!existsSync(cli)) {
+    mkdirSync(dest, { recursive: true });
+    cpSync(treeRoot, dest, { recursive: true, dereference: true });
+  }
+  return cli;
+}
+
 /** How agents should start the MCP server. */
-export function serverCommand(opts: { npx?: boolean } = {}): ServerCommand {
-  const cli = path.join(PACKAGE_ROOT, "dist", "cli.js");
-  const fromNpxCache = /[\\/]_npx[\\/]/.test(PACKAGE_ROOT);
-  if (opts.npx || fromNpxCache || !existsSync(cli)) {
+export function serverCommand(opts: { npx?: boolean; cliPath?: string } = {}): ServerCommand {
+  if (opts.npx) {
     if (process.platform === "win32") return { command: "cmd", args: ["/c", "npx", "-y", "remake-agents@latest", "mcp"] };
     return { command: "npx", args: ["-y", "remake-agents@latest", "mcp"] };
   }
-  // Installed globally or run from a clone: use this exact Node + CLI (works even when GUI apps have a minimal PATH).
-  return { command: process.execPath, args: [cli, "mcp"] };
+  // Use this exact Node + CLI (works even when GUI apps like Cursor start with a minimal PATH).
+  return { command: process.execPath, args: [opts.cliPath ?? path.join(PACKAGE_ROOT, "dist", "cli.js"), "mcp"] };
 }
 
 export function tilde(p: string): string {
@@ -124,8 +145,8 @@ export function tilde(p: string): string {
 }
 
 function isOurs(v: unknown): boolean {
-  const s = JSON.stringify(v ?? "");
-  return s.includes("remake-agents") || s.includes(path.join(PACKAGE_ROOT, "dist", "cli.js").replace(/\\/g, "\\\\"));
+  const s = JSON.stringify(v ?? "").replace(/\\\\/g, "/");
+  return s.includes("remake-agents") || s.includes("/.remake/app/") || s.includes(path.join(PACKAGE_ROOT, "dist", "cli.js").replace(/\\/g, "/"));
 }
 
 function backup(file: string): void {
