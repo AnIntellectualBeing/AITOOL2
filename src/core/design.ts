@@ -169,6 +169,7 @@ function cluster(buckets: Iterable<{ n: number; r: number; g: number; b: number 
 }
 
 const rgbOf = (c: Cluster): [number, number, number] => [c.r / c.n, c.g / c.n, c.b / c.n];
+const hexToRgb = (h: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 
 /** Colour tokens across a set of screens, with guessed roles (background, text, accent...). */
 export async function extractPalette(
@@ -177,6 +178,8 @@ export async function extractPalette(
 ): Promise<Palette> {
   const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
   const textBuckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  // Saturated pixels on their own: accents (buttons, links, toggles) often cover <1% of a screen.
+  const satBuckets = new Map<number, { n: number; r: number; g: number; b: number }>();
   const add = (m: typeof buckets, r: number, g: number, b: number, w = 1) => {
     const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
     const e = m.get(key);
@@ -194,6 +197,7 @@ export async function extractPalette(
     for (let y = y0; y < y1; y++) for (let x = 0; x < img.width; x++) {
       const i = (y * img.width + x) * 3;
       add(buckets, img.data[i], img.data[i + 1], img.data[i + 2]);
+      if (saturation(img.data[i], img.data[i + 1], img.data[i + 2]) > 0.4 && Math.max(img.data[i], img.data[i + 1], img.data[i + 2]) > 60) add(satBuckets, img.data[i], img.data[i + 1], img.data[i + 2]);
     }
     if (im.ocr?.length) {
       const full = await loadRaw(im.input, { channels: 3 });
@@ -236,10 +240,14 @@ export async function extractPalette(
       const muted = common.find((c) => c !== main && deltaE(c.lab, main.lab) > 12);
       if (muted) roles.mutedText = hex(...rgbOf(muted));
     }
-    const accent = clusters
-      .filter((c) => c.n / total > 0.002 && saturation(...rgbOf(c)) > 0.35 && Math.max(...rgbOf(c)) > 60)
-      .sort((a, b) => b.n - a.n)[0];
-    if (accent) roles.accent = hex(...rgbOf(accent));
+    const sat = cluster(satBuckets.values(), 10).filter((c) => c.n / total > 0.0005);
+    const accent = sat[0];
+    if (accent) {
+      roles.accent = hex(...rgbOf(accent));
+      if (!colors.some((c) => deltaE(rgbToLab(...hexToRgb(c.hex)), accent.lab) < 10)) {
+        colors.push({ hex: roles.accent, share: Math.round((accent.n / total) * 1000) / 1000 });
+      }
+    }
   }
   return { colors, roles };
 }

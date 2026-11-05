@@ -62,7 +62,7 @@ export async function shutdownOcr(): Promise<void> {
  * OCR an image. Light-on-dark screens are inverted first and small images are
  * upscaled, which makes Tesseract far more reliable on UI screenshots.
  */
-export async function ocrImage(input: string | Buffer, opts: { minConfidence?: number } = {}): Promise<OcrLine[]> {
+export async function ocrImage(input: string | Buffer, opts: { minConfidence?: number; secondPass?: boolean } = {}): Promise<OcrLine[]> {
   const meta = await sharp(input).metadata();
   const W = meta.width ?? 0;
   const H = meta.height ?? 0;
@@ -75,41 +75,125 @@ export async function ocrImage(input: string | Buffer, opts: { minConfidence?: n
   if (dark) img = img.negate({ alpha: false });
   const buf = await img.png().toBuffer();
 
-  const run = async () => {
-    const worker = await getWorker();
-    const res = await worker.recognize(buf, {}, { blocks: true, text: false });
-    return res.data;
+  const recognise = async (image: Buffer) => {
+    const run = async () => {
+      const worker = await getWorker();
+      const res = await worker.recognize(image, {}, { blocks: true, text: false });
+      return res.data;
+    };
+    // Tesseract workers are single-threaded: serialise calls.
+    const p = queue.then(run, run);
+    queue = p.catch(() => undefined);
+    return p;
   };
-  // Tesseract workers are single-threaded: serialise calls.
-  const p = queue.then(run, run);
-  queue = p.catch(() => undefined);
-  const data = await p;
 
   const minConf = opts.minConfidence ?? 55;
-  const lines: OcrLine[] = [];
   const toBox = (b: { x0: number; y0: number; x1: number; y1: number }) => ({
     x: Math.round(b.x0 / scale),
     y: Math.round(b.y0 / scale),
     w: Math.round((b.x1 - b.x0) / scale),
     h: Math.round((b.y1 - b.y0) / scale),
   });
-  for (const block of data.blocks ?? []) {
-    for (const para of block.paragraphs ?? []) {
-      for (const line of para.lines ?? []) {
-        const words = (line.words ?? [])
-          .filter((w: any) => w.confidence >= minConf - 10 && /[\p{L}\p{N}]/u.test(w.text))
-          .map((w: any) => ({ text: String(w.text), box: toBox(w.bbox), confidence: Math.round(w.confidence) }));
-        if (!words.length) continue;
-        const text = words.map((w: { text: string }) => w.text).join(" ").trim();
-        const conf = words.reduce((a: number, w: { confidence: number }) => a + w.confidence, 0) / words.length;
-        if (conf < minConf || text.length === 0) continue;
-        // Single stray characters are usually icons misread as letters.
-        if (text.length === 1 && conf < 85) continue;
-        const x0 = Math.min(...words.map((w: any) => w.box.x));
-        const y0 = Math.min(...words.map((w: any) => w.box.y));
-        const x1 = Math.max(...words.map((w: any) => w.box.x + w.box.w));
-        const y1 = Math.max(...words.map((w: any) => w.box.y + w.box.h));
-        lines.push({ text, box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, confidence: Math.round(conf), words });
+  const extract = (data: any): OcrLine[] => {
+    const out: OcrLine[] = [];
+    for (const block of data.blocks ?? []) {
+      for (const para of block.paragraphs ?? []) {
+        for (const line of para.lines ?? []) {
+          const words = (line.words ?? [])
+            .filter((w: any) => w.confidence >= minConf - 10 && /[\p{L}\p{N}]/u.test(w.text))
+            .map((w: any) => ({ text: String(w.text), box: toBox(w.bbox), confidence: Math.round(w.confidence) }));
+          if (!words.length) continue;
+          const text = words.map((w: { text: string }) => w.text).join(" ").trim();
+          const conf = words.reduce((a: number, w: { confidence: number }) => a + w.confidence, 0) / words.length;
+          if (conf < minConf || text.length === 0) continue;
+          // Single stray characters are usually icons misread as letters.
+          if (text.length === 1 && conf < 85) continue;
+          const x0 = Math.min(...words.map((w: any) => w.box.x));
+          const y0 = Math.min(...words.map((w: any) => w.box.y));
+          const x1 = Math.max(...words.map((w: any) => w.box.x + w.box.w));
+          const y1 = Math.max(...words.map((w: any) => w.box.y + w.box.h));
+          out.push({ text, box: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, confidence: Math.round(conf), words });
+        }
+      }
+    }
+    return out;
+  };
+
+  const lines = extract(await recognise(buf));
+  if (opts.secondPass !== false) {
+    // Light text on filled buttons/cards (white on green, …) is skipped by Tesseract's page
+    // layout analysis. OCR each dark/saturated filled box on its own, inverted.
+    const { layoutBoxes, dominantColor } = await import("./design.js");
+    const { loadRaw, luminance } = await import("./image.js");
+    const L = await layoutBoxes(input, { width: 360 });
+    const full = await loadRaw(input, { channels: 3 });
+    // Boxes from layoutBoxes include a little margin: judge the fill colour by the middle.
+    const inner = (b: { x: number; y: number; w: number; h: number }) => ({ x: Math.round(b.x + b.w * 0.25), y: Math.round(b.y + b.h * 0.25), w: Math.max(1, Math.round(b.w * 0.5)), h: Math.max(1, Math.round(b.h * 0.5)) });
+    const cands = L.boxes
+      .map((b) => ({ x: Math.round(b.x * W), y: Math.round(b.y * H), w: Math.round(b.w * W), h: Math.round(b.h * H) }))
+      .filter((b) => b.w * b.h > W * H * 0.002 && b.w * b.h < W * H * 0.5 && b.h > 12)
+      .filter((b) => luminance(...dominantColor(full, inner(b))) < 0.45)
+      .slice(0, 12);
+    for (const box of cands) {
+      // Tighten to the filled area (layout boxes carry some margin), inset past rounded corners.
+      const [r, g, bl] = dominantColor(full, inner(box));
+      let fx0 = Infinity, fy0 = Infinity, fx1 = -1, fy1 = -1;
+      for (let y = box.y; y < Math.min(H, box.y + box.h); y++) {
+        for (let x = box.x; x < Math.min(W, box.x + box.w); x++) {
+          const i = (y * W + x) * 3;
+          if (Math.abs(full.data[i] - r) + Math.abs(full.data[i + 1] - g) + Math.abs(full.data[i + 2] - bl) < 60) {
+            if (x < fx0) fx0 = x;
+            if (x > fx1) fx1 = x;
+            if (y < fy0) fy0 = y;
+            if (y > fy1) fy1 = y;
+          }
+        }
+      }
+      if (fx1 < 0) continue;
+      const fh = fy1 - fy0 + 1;
+      const inset = Math.round(Math.min(10, fh * 0.12));
+      const b = { x: fx0 + inset, y: fy0 + inset, w: Math.max(4, fx1 - fx0 + 1 - 2 * inset), h: Math.max(4, fh - 2 * inset) };
+      const fillGray = (r * 299 + g * 587 + bl * 114) / 1000;
+      const k = b.w < 600 ? 2 : 1;
+      const raw = await sharp(input)
+        .removeAlpha()
+        .extract({ left: b.x, top: b.y, width: Math.min(b.w, W - b.x), height: Math.min(b.h, H - b.y) })
+        .resize({ width: Math.round(b.w * k), kernel: "lanczos3" })
+        .extractChannel(0)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      // Pixels clearly lighter than the fill are text: draw them black on white.
+      const cut = fillGray + (255 - fillGray) * 0.45;
+      const bin = Buffer.alloc(raw.data.length);
+      let ink = 0;
+      for (let i = 0; i < bin.length; i++) {
+        const isText = raw.data[i] > cut;
+        bin[i] = isText ? 0 : 255;
+        if (isText) ink++;
+      }
+      if (process.env.REMAKE_DEBUG_OCR) console.error("[ocr box]", JSON.stringify(box), Math.round(fillGray), ink / bin.length);
+      if (ink < bin.length * 0.003 || ink > bin.length * 0.5) continue;
+      const crop = await sharp(bin, { raw: { width: raw.info.width, height: raw.info.height, channels: 1 } })
+        .extend({ top: 12, bottom: 12, left: 12, right: 12, background: "#ffffff" })
+        .png()
+        .toBuffer();
+      const found = extract(await recognise(crop));
+      for (const l of found) {
+        const mapped: OcrLine = {
+          ...l,
+          // extract() divided by `scale`; undo that, then map from crop space back to the image.
+          box: { x: Math.round(b.x + (l.box.x * scale - 12) / k), y: Math.round(b.y + (l.box.y * scale - 12) / k), w: Math.round((l.box.w * scale) / k), h: Math.round((l.box.h * scale) / k) },
+          words: l.words?.map((w) => ({ ...w, box: { x: Math.round(b.x + (w.box.x * scale - 12) / k), y: Math.round(b.y + (w.box.y * scale - 12) / k), w: Math.round((w.box.w * scale) / k), h: Math.round((w.box.h * scale) / k) } })),
+        };
+        if (l.confidence < minConf + 10 || (l.text.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < 2) continue;
+        const clash = lines.findIndex((x) => {
+          const ix = Math.max(0, Math.min(x.box.x + x.box.w, mapped.box.x + mapped.box.w) - Math.max(x.box.x, mapped.box.x));
+          const iy = Math.max(0, Math.min(x.box.y + x.box.h, mapped.box.y + mapped.box.h) - Math.max(x.box.y, mapped.box.y));
+          return ix * iy > 0.25 * Math.min(x.box.w * x.box.h, mapped.box.w * mapped.box.h);
+        });
+        if (clash < 0) lines.push(mapped);
+        // A much more confident read of the same spot replaces a garbled one ("20f4" → "2 of 4").
+        else if (mapped.confidence > lines[clash].confidence + 15) lines[clash] = mapped;
       }
     }
   }

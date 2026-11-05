@@ -349,7 +349,12 @@ function analyseRegion(frames: Uint8Array[], w: number, h: number, R: Box, searc
   // Scroll: B is A moved vertically, nearly pixel-perfect over the overlap.
   const sc = bestShift(B, A, null, sm, "y", Math.floor(R.h * 0.9), buf);
   const scBase = modelError(B, A, null, sm, "y", 0, buf).err;
-  if (sc.d !== 0 && sc.err < 3 && sc.err < scBase * 0.25) {
+  const midIdx = Math.floor(total / 2);
+  const midIsShift = () => {
+    const m = bestShift(frames[midIdx], A, null, sm, "y", Math.abs(sc.d) + 4, buf);
+    return m.err < 4 && Math.sign(m.d) === Math.sign(sc.d);
+  };
+  if (sc.d !== 0 && sc.err < 3 && sc.err < scBase * 0.25 && (total < 2 || midIsShift())) {
     const idx = Array.from({ length: total - 1 }, (_, i) => i + 1);
     const progress = idx.map((i) => ({ t: i / total, p: bestShift(frames[i], A, null, sm, "y", Math.abs(sc.d) + 4, buf).d / sc.d }));
     return { kind: "scroll", progress, easing: fitEasing(progress), scrollPx: sc.d, err: sc.err, fadeErr: Infinity };

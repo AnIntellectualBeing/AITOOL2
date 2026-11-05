@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Full pipeline (Linux, Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm ci
+      - name: Install Chromium for Playwright
+        run: npx playwright-core install --with-deps chromium
+      - run: npm run build
+      - run: npm run typecheck
+      - name: Unit + end-to-end tests (watch_video, infer_flow, record_build, compare, side-by-side, MCP)
+        run: npm test
+      - name: Fixtures are reproducible
+        run: npm run fixtures && node dist/cli.js watch fixtures/videos/phone-app.mp4 --budget low --no-transcribe > /dev/null
+      - name: Upload test output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remake-test-output-node${{ matrix.node }}
+          path: /tmp/remake-e2e-*
+          if-no-files-found: ignore
+
+  cross-platform:
+    name: Smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:unit
+      - name: watch_video on a fixture
+        run: node dist/cli.js watch fixtures/videos/web-app.mp4 --budget low --no-transcribe --out ${{ runner.temp }}/remake-out
+      - name: setup / uninstall round trip (dry run + real, in a temporary home)
+        shell: bash
+        run: |
+          export HOME="${{ runner.temp }}/fake-home" USERPROFILE="${{ runner.temp }}/fake-home" REMAKE_HOME="${{ runner.temp }}/fake-home/.remake"
+          mkdir -p "$HOME"
+          node dist/cli.js setup --all --dry-run
+          node dist/cli.js setup --all --yes
+          node dist/cli.js uninstall

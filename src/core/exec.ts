@@ -21,6 +21,8 @@ export interface RunOptions {
   /** Friendly name for error messages, e.g. "ffmpeg". */
   label?: string;
   maxStderr?: number;
+  /** Needed on Windows for .cmd shims such as npm.cmd. */
+  shell?: boolean;
 }
 
 /** Run a program with an argument array (no shell), collecting output. */
@@ -31,6 +33,7 @@ export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise
       env: opts.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
+      shell: opts.shell,
     };
     let child;
     try {

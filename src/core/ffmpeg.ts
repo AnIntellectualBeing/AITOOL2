@@ -84,6 +84,7 @@ export async function installPrivateFfmpeg(log: (s: string) => void = () => {}):
     label: "npm install ffmpeg-static",
     timeoutMs: 10 * 60_000,
     env: process.env,
+    shell: process.platform === "win32",
   }).catch((e) => {
     throw new RemakeError("ffmpeg_download_failed", `Downloading ffmpeg failed: ${(e as Error).message}`, ffmpegInstallHelp());
   });
